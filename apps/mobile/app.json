@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "Fantasy Draft Assistant",
+    "slug": "fantasy-draft-assistant",
+    "scheme": "fantasydraft",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": false,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.fantasydraft.assistant"
+    },
+    "android": {
+      "package": "com.fantasydraft.assistant"
+    },
+    "plugins": ["expo-router", "expo-secure-store", "expo-notifications"]
+  }
+}

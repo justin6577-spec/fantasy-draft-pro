@@ -1,0 +1,14 @@
+node_modules
+**/node_modules
+apps/mobile
+**/dist
+**/.expo
+**/android
+**/ios
+.git
+*.log
+.env
+**/.env
+semantic-review
+.kiro
+.github

@@ -1,0 +1,297 @@
+// Prisma schema for Fantasy Draft Assistant
+// Mirrors the data models described in .kiro/specs/fantasy-draft-assistant/design.md
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LeaguePlatform {
+  native
+  yahoo
+  sleeper
+  espn
+}
+
+enum LeagueLinkStatus {
+  active
+  expired
+  disconnected
+}
+
+enum DraftStatus {
+  scheduled
+  in_progress
+  paused
+  completed
+}
+
+enum PickSource {
+  manual
+  auto
+  skip
+}
+
+enum EntitlementTier {
+  free
+  premium
+}
+
+enum EntitlementStatus {
+  active
+  expired
+  grace_period
+  revoked
+}
+
+enum NewsImpactTag {
+  out
+  questionable
+  role_change
+  breakout
+  neutral
+}
+
+enum PushPlatform {
+  ios
+  android
+}
+
+enum TurnNotificationStatus {
+  pending
+  processing
+  sent
+  failed
+  skipped
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  passwordHash  String?
+  authProviders String[] @default([])
+  createdAt     DateTime @default(now())
+
+  leagueLinks       LeagueLink[]
+  entitlements      Entitlement[]
+  watchlist         WatchlistEntry[]
+  refreshSessions   RefreshSession[]
+  draftParticipants DraftParticipant[]
+  pushTokens        PushToken[]
+  turnNotifications TurnNotificationOutbox[]
+}
+
+model PushToken {
+  id             String       @id @default(uuid())
+  userId         String
+  token          String       @unique
+  installationId String       @unique
+  platform       PushPlatform
+  enabled        Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  lastSeenAt     DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, enabled])
+}
+
+model TurnNotificationOutbox {
+  id            String                 @id @default(uuid())
+  draftId       String
+  pickIndex     Int
+  userId        String
+  status        TurnNotificationStatus @default(pending)
+  attempts      Int                    @default(0)
+  nextAttemptAt DateTime               @default(now())
+  expoTicketIds String[]               @default([])
+  lastError     String?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  sentAt        DateTime?
+  expiresAt     DateTime
+
+  draft Draft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([draftId, pickIndex, userId])
+  @@index([status, nextAttemptAt])
+  @@index([userId])
+}
+
+model RefreshSession {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  familyId  String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+}
+
+model Entitlement {
+  id        String            @id @default(uuid())
+  userId    String
+  tier      EntitlementTier   @default(free)
+  seasonId  String?
+  expiresAt DateTime?
+  source    String            @default("revenuecat")
+  status    EntitlementStatus @default(active)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model LeagueLink {
+  id               String           @id @default(uuid())
+  userId           String
+  platform         LeaguePlatform
+  externalLeagueId String?
+  credentialsEnc   String?
+  lastSyncedAt     DateTime?
+  status           LeagueLinkStatus @default(active)
+
+  user     User    @relation(fields: [userId], references: [id])
+  league   League? @relation(fields: [leagueId], references: [id])
+  leagueId String?
+
+  @@unique([userId, platform, externalLeagueId])
+  @@index([userId])
+}
+
+model League {
+  id              String         @id @default(uuid())
+  name            String
+  platform        LeaguePlatform
+  seasonId        String
+  scoringSettings Json
+  rosterSettings  Json
+
+  leagueLinks LeagueLink[]
+  drafts      Draft[]
+}
+
+model Draft {
+  id                    String      @id @default(uuid())
+  leagueId              String
+  order                 String[]
+  currentPickIndex      Int         @default(0)
+  clockSecondsRemaining Int
+  status                DraftStatus @default(scheduled)
+  settings              Json
+
+  league            League                   @relation(fields: [leagueId], references: [id])
+  picks             Pick[]
+  participants      DraftParticipant[]
+  turnNotifications TurnNotificationOutbox[]
+
+  @@index([leagueId])
+}
+
+model DraftParticipant {
+  draftId   String
+  userId    String
+  teamId    String
+  createdAt DateTime @default(now())
+
+  draft Draft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([draftId, userId])
+  @@unique([draftId, teamId])
+  @@index([userId])
+}
+
+model Pick {
+  id        String     @id @default(uuid())
+  draftId   String
+  pickIndex Int
+  teamId    String
+  playerId  String?
+  madeAt    DateTime   @default(now())
+  source    PickSource @default(manual)
+
+  draft Draft @relation(fields: [draftId], references: [id])
+
+  @@unique([draftId, pickIndex])
+  @@unique([draftId, playerId])
+  @@index([draftId])
+}
+
+model Player {
+  id          String @id @default(uuid())
+  name        String
+  position    String
+  team        String
+  byeWeek     Int?
+  externalIds Json   @default("{}")
+
+  rankings ProjectionRanking[]
+  articles NewsArticle[]
+  watchers WatchlistEntry[]
+}
+
+model ProjectionRanking {
+  id              String   @id @default(uuid())
+  playerId        String
+  seasonId        String
+  scoringType     String
+  rank            Int
+  projectedPoints Float
+  adp             Float?
+  updatedAt       DateTime @updatedAt
+
+  player Player @relation(fields: [playerId], references: [id])
+
+  @@unique([playerId, seasonId, scoringType])
+  @@index([playerId])
+}
+
+model NewsArticle {
+  id          String   @id @default(uuid())
+  playerId    String
+  sourceUrl   String
+  publishedAt DateTime
+  rawText     String
+
+  player  Player       @relation(fields: [playerId], references: [id])
+  summary NewsSummary?
+
+  @@index([playerId])
+}
+
+model NewsSummary {
+  id               String        @id @default(uuid())
+  articleClusterId String        @unique
+  playerId         String
+  summaryText      String
+  impactTag        NewsImpactTag @default(neutral)
+  citedSources     Json
+  generatedAt      DateTime      @default(now())
+  articleId        String?       @unique
+
+  article NewsArticle? @relation(fields: [articleId], references: [id])
+
+  @@index([playerId])
+}
+
+model WatchlistEntry {
+  userId   String
+  playerId String
+
+  user   User   @relation(fields: [userId], references: [id])
+  player Player @relation(fields: [playerId], references: [id])
+
+  @@id([userId, playerId])
+}

@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: fantasy-draft-api
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: fantasy-draft-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: fantasy-draft-redis
+          property: connectionString
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: NEWS_PROVIDER
+        value: mock
+
+  - type: keyvalue
+    name: fantasy-draft-redis
+    plan: free
+    ipAllowList: []
+
+databases:
+  - name: fantasy-draft-db
+    plan: free
+    databaseName: fantasy_draft
+    user: fantasy_draft
